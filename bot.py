@@ -1,7 +1,8 @@
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = "8534355606:AAHIHXCgqZ16WXJcvYpW57J_d9iLF6-CbNY"
+TOKEN = os.environ["TOKEN"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Halo! Kirim foto + video referensi buat motion transfer ya.")
