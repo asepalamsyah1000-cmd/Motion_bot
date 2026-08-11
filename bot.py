@@ -1,9 +1,11 @@
 import os
-import fal_client
+import time
+import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ["TOKEN"]
+DEAPI_KEY = os.environ["DEAPI_KEY"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Halo! Kirim FOTO karakter dulu, setelah itu kirim VIDEO referensi gerakannya.")
@@ -25,12 +27,44 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Sedang proses motion transfer, mohon tunggu beberapa menit...")
 
     try:
-        result = fal_client.subscribe(
-            "fal-ai/kling-video/v2.6/standard/motion-control",
-            arguments={"image_url": photo_url, "video_url": video_url},
+        headers = {
+            "Authorization": f"Bearer {DEAPI_KEY}",
+            "Accept": "application/json",
+        }
+        data = {
+            "model": "Wan2_2_Animate_14B_INT8",
+            "video": video_url,
+            "ref_image": photo_url,
+        }
+        resp = requests.post(
+            "https://api.deapi.ai/api/v1/client/video-replacement",
+            headers=headers,
+            data=data,
         )
-        result_video_url = result["video"]["url"]
-        await update.message.reply_video(result_video_url)
+        resp.raise_for_status()
+        job = resp.json()
+        job_id = job.get("id") or job.get("job_id")
+
+        result_url = None
+        for _ in range(60):
+            time.sleep(5)
+            status_resp = requests.get(
+                f"https://api.deapi.ai/api/v1/client/jobs/{job_id}",
+                headers=headers,
+            )
+            status_data = status_resp.json()
+            status = status_data.get("status")
+            if status == "completed":
+                result_url = status_data.get("output_url") or status_data.get("result", {}).get("url")
+                break
+            elif status == "failed":
+                raise Exception(status_data.get("error", "Proses gagal di server"))
+
+        if result_url:
+            await update.message.reply_video(result_url)
+        else:
+            await update.message.reply_text("Proses terlalu lama, coba lagi nanti.")
+
     except Exception as e:
         await update.message.reply_text(f"Gagal proses: {e}")
 
